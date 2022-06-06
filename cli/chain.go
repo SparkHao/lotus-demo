@@ -20,13 +20,13 @@ import (
 	cborutil "github.com/filecoin-project/go-cbor-util"
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/go-state-types/big"
+	init8 "github.com/filecoin-project/go-state-types/builtin/v8/init"
 	"github.com/filecoin-project/specs-actors/actors/builtin"
 	"github.com/filecoin-project/specs-actors/actors/builtin/account"
 	"github.com/filecoin-project/specs-actors/actors/builtin/market"
 	"github.com/filecoin-project/specs-actors/actors/builtin/miner"
 	"github.com/filecoin-project/specs-actors/actors/builtin/power"
 	"github.com/filecoin-project/specs-actors/actors/util/adt"
-	init8 "github.com/filecoin-project/specs-actors/v8/actors/builtin/init"
 	cid "github.com/ipfs/go-cid"
 	"github.com/urfave/cli/v2"
 	cbg "github.com/whyrusleeping/cbor-gen"
@@ -65,6 +65,7 @@ var ChainCmd = &cli.Command{
 		ChainInstallCmd,
 		ChainExecCmd,
 		ChainInvokeCmd,
+		ChainInvoke2Cmd,
 	},
 }
 
@@ -1659,6 +1660,11 @@ var ChainExecCmd = &cli.Command{
 		afmt.Printf("ID Address: %s\n", result.IDAddress)
 		afmt.Printf("Robust Address: %s\n", result.RobustAddress)
 
+		if len(wait.Receipt.Return) > 0 {
+			result := base64.StdEncoding.EncodeToString(wait.Receipt.Return)
+			afmt.Printf("Return: %s\n", result)
+		}
+
 		return nil
 	},
 }
@@ -1750,6 +1756,143 @@ var ChainInvokeCmd = &cli.Command{
 		if len(wait.Receipt.Return) > 0 {
 			result := base64.StdEncoding.EncodeToString(wait.Receipt.Return)
 			afmt.Println(result)
+
+			if msg.Method == 13 {
+				address, _ := address.NewFromBytes(wait.Receipt.Return)
+				afmt.Println(address)
+			}
+
+			if msg.Method == 11 || msg.Method == 12 || msg.Method == 53 || msg.Method == 101 {
+				_, cid, _ := cid.CidFromBytes(wait.Receipt.Return)
+				afmt.Println(cid)
+			}
+
+			if msg.Method == 52 || msg.Method == 51 || msg.Method == 16 || msg.Method == 15 || msg.Method == 102 || msg.Method == 103 || msg.Method == 104 ||
+				msg.Method == 71 || msg.Method == 72 || msg.Method == 73 || msg.Method == 74 || msg.Method == 61 || msg.Method == 62 || msg.Method == 63 ||
+				msg.Method == 64 || msg.Method == 32 || msg.Method == 91 || msg.Method == 55{
+				afmt.Println(wait.Receipt.Return)
+			}
+
+		} else {
+			afmt.Println("OK")
+		}
+
+		return nil
+	},
+}
+
+var ChainInvoke2Cmd = &cli.Command{
+	Name:      "invoke",
+	Usage:     "Invoke a method in an actor",
+	ArgsUsage: "address method [params]",
+	Flags: []cli.Flag{
+		&cli.StringFlag{
+			Name:  "from",
+			Usage: "optionally specify the account to use for sending the exec message",
+		},
+	},
+	Action: func(cctx *cli.Context) error {
+		afmt := NewAppFmt(cctx.App)
+
+		api, closer, err := GetFullNodeAPI(cctx)
+		if err != nil {
+			return err
+		}
+		defer closer()
+		ctx := ReqContext(cctx)
+
+		if argc := cctx.Args().Len(); argc < 2 || argc > 3 {
+			return xerrors.Errorf("must pass the address, method and (optionally) method params")
+		}
+
+		addr, err := address.NewFromString(cctx.Args().Get(0))
+		if err != nil {
+			return xerrors.Errorf("failed to decode address: %w", err)
+		}
+
+		method, err := strconv.Atoi(cctx.Args().Get(1))
+		if err != nil {
+			return xerrors.Errorf("failed to parse method: %w", err)
+		}
+
+		var params []byte
+		if cctx.Args().Len() == 3 {
+			params, err = base64.StdEncoding.DecodeString(cctx.Args().Get(2))
+			if err != nil {
+				return xerrors.Errorf("decoding base64 value: %w", err)
+			}
+		}
+
+		var value int
+		if cctx.Args().Len() == 4 {
+			value, err = strconv.Atoi(cctx.Args().Get(3))
+			if err != nil {
+				return xerrors.Errorf("decoding base64 value: %w", err)
+			}
+		}
+
+		var fromAddr address.Address
+		if from := cctx.String("from"); from == "" {
+			defaddr, err := api.WalletDefaultAddress(ctx)
+			if err != nil {
+				return err
+			}
+
+			fromAddr = defaddr
+		} else {
+			addr, err := address.NewFromString(from)
+			if err != nil {
+				return err
+			}
+
+			fromAddr = addr
+		}
+
+		msg := &types.Message{
+			To:     addr,
+			From:   fromAddr,
+			Value:  abi.NewTokenAmount(int64(value)),
+			Method: abi.MethodNum(method),
+			Params: params,
+		}
+
+		afmt.Println("sending message...")
+		smsg, err := api.MpoolPushMessage(ctx, msg, nil)
+		if err != nil {
+			return xerrors.Errorf("failed to push message: %w", err)
+		}
+
+		afmt.Println("waiting for message to execute...")
+		wait, err := api.StateWaitMsg(ctx, smsg.Cid(), 0)
+		if err != nil {
+			return xerrors.Errorf("error waiting for message: %w", err)
+		}
+
+		// check it executed successfully
+		if wait.Receipt.ExitCode != 0 {
+			return xerrors.Errorf("actor execution failed")
+		}
+
+		if len(wait.Receipt.Return) > 0 {
+			result := base64.StdEncoding.EncodeToString(wait.Receipt.Return)
+			afmt.Println(result)
+
+			if msg.Method == 13 {
+				address, _ := address.NewFromBytes(wait.Receipt.Return)
+				afmt.Println(address)
+			}
+
+			if msg.Method == 11 || msg.Method == 12 || msg.Method == 53 || msg.Method == 101 {
+				_, cid, _ := cid.CidFromBytes(wait.Receipt.Return)
+				afmt.Println(cid)
+			}
+
+			if msg.Method == 52 || msg.Method == 51 || msg.Method == 16 || msg.Method == 15 || msg.Method == 102 || msg.Method == 103 || msg.Method == 104 ||
+				msg.Method == 71 || msg.Method == 72 || msg.Method == 73 || msg.Method == 74 || msg.Method == 61 || msg.Method == 62 || msg.Method == 63 ||
+				msg.Method == 64 || msg.Method == 32 || msg.Method == 91 || msg.Method == 55{
+				afmt.Println(wait.Receipt.Return)
+			}
+
 		} else {
 			afmt.Println("OK")
 		}

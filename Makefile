@@ -10,7 +10,7 @@ GOCC?=go
 GOVERSION:=$(shell $(GOCC) version | tr ' ' '\n' | grep go1 | sed 's/^go//' | awk -F. '{printf "%d%03d%03d", $$1, $$2, $$3}')
 ifeq ($(shell expr $(GOVERSION) \< 1016000), 1)
 $(warning Your Golang version is go$(shell expr $(GOVERSION) / 1000000).$(shell expr $(GOVERSION) % 1000000 / 1000).$(shell expr $(GOVERSION) % 1000))
-$(error Update Golang to version to at least 1.16.0)
+$(error Update Golang to version to at least 1.17.9)
 endif
 
 # git modules that need to be loaded
@@ -57,14 +57,6 @@ build/.update-modules:
 
 # end git modules
 
-# builtin actor bundles
-builtin-actor-bundles:
-	./build/builtin-actors/fetch-bundles.sh
-
-BUILD_DEPS+=builtin-actor-bundles
-
-.PHONY: builtin-actor-bundles
-
 ## MAIN BINARIES
 
 CLEAN+=build/.update-modules
@@ -72,22 +64,27 @@ CLEAN+=build/.update-modules
 deps: $(BUILD_DEPS)
 .PHONY: deps
 
-build-devnets: build lotus-seed lotus-shed lotus-wallet lotus-gateway
+build-devnets: build lotus-seed lotus-shed lotus-wallet lotus-gateway lotus-fountain lotus-stats
 .PHONY: build-devnets
 
 debug: GOFLAGS+=-tags=debug
+debug: GOFLAGS+=-ldflags=-X=github.com/filecoin-project/lotus/build.NetworkBundle=devnet
 debug: build-devnets
 
 2k: GOFLAGS+=-tags=2k
+2k: GOFLAGS+=-ldflags=-X=github.com/filecoin-project/lotus/build.NetworkBundle=devnet
 2k: build-devnets
 
 calibnet: GOFLAGS+=-tags=calibnet
+calibnet: GOFLAGS+=-ldflags=-X=github.com/filecoin-project/lotus/build.NetworkBundle=calibnet
 calibnet: build-devnets
 
 butterflynet: GOFLAGS+=-tags=butterflynet
+butterflynet: GOFLAGS+=-ldflags=-X=github.com/filecoin-project/lotus/build.NetworkBundle=butterflynet
 butterflynet: build-devnets
 
 interopnet: GOFLAGS+=-tags=interopnet
+interopnet: GOFLAGS+=-ldflags=-X=github.com/filecoin-project/lotus/build.NetworkBundle=interopnet
 interopnet: build-devnets
 
 lotus: $(BUILD_DEPS)
@@ -105,7 +102,7 @@ BINS+=lotus-miner
 
 lotus-worker: $(BUILD_DEPS)
 	rm -f lotus-worker
-	$(GOCC) build $(GOFLAGS) -o lotus-worker ./cmd/lotus-seal-worker
+	$(GOCC) build $(GOFLAGS) -o lotus-worker ./cmd/lotus-worker
 .PHONY: lotus-worker
 BINS+=lotus-worker
 

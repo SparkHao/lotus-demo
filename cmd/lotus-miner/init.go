@@ -13,7 +13,8 @@ import (
 	"path/filepath"
 	"strconv"
 
-	market8 "github.com/filecoin-project/specs-actors/v8/actors/builtin/market"
+	"github.com/filecoin-project/go-state-types/builtin"
+	market8 "github.com/filecoin-project/go-state-types/builtin/v8/market"
 
 	power6 "github.com/filecoin-project/specs-actors/v6/actors/builtin/power"
 
@@ -21,7 +22,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/ipfs/go-datastore"
 	"github.com/ipfs/go-datastore/namespace"
-	cbor "github.com/ipfs/go-ipld-cbor"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/mitchellh/go-homedir"
@@ -37,6 +37,7 @@ import (
 	sectorstorage "github.com/filecoin-project/lotus/extern/sector-storage"
 	"github.com/filecoin-project/lotus/extern/sector-storage/ffiwrapper"
 	"github.com/filecoin-project/lotus/extern/sector-storage/stores"
+	"github.com/filecoin-project/lotus/extern/sector-storage/storiface"
 
 	miner2 "github.com/filecoin-project/specs-actors/v2/actors/builtin/miner"
 	power2 "github.com/filecoin-project/specs-actors/v2/actors/builtin/power"
@@ -58,6 +59,7 @@ import (
 	"github.com/filecoin-project/lotus/journal"
 	"github.com/filecoin-project/lotus/journal/fsjournal"
 	storageminer "github.com/filecoin-project/lotus/miner"
+	"github.com/filecoin-project/lotus/node/bundle"
 	"github.com/filecoin-project/lotus/node/modules"
 	"github.com/filecoin-project/lotus/node/modules/dtypes"
 	"github.com/filecoin-project/lotus/node/repo"
@@ -216,17 +218,11 @@ var initCmd = &cli.Command{
 				return err
 			}
 
-			if len(build.BuiltinActorsV8Bundle()) > 0 {
-				bs := blockstore.NewMemory()
+			// load bundles
+			bs := blockstore.NewMemory()
 
-				if err := actors.LoadBundle(context.TODO(), bs, actors.Version8, build.BuiltinActorsV8Bundle()); err != nil {
-					return xerrors.Errorf("error loading actor bundle: %w", err)
-				}
-
-				cborStore := cbor.NewCborStore(bs)
-				if err := actors.LoadManifests(ctx, cborStore); err != nil {
-					return xerrors.Errorf("error loading actor manifests: %w", err)
-				}
+			if err := bundle.FetchAndLoadBundles(ctx, bs, build.BuiltinActorReleases); err != nil {
+				return err
 			}
 
 			var localPaths []stores.LocalPath
@@ -247,7 +243,7 @@ var initCmd = &cli.Command{
 
 			if !cctx.Bool("no-local-storage") {
 				b, err := json.MarshalIndent(&stores.LocalStorageMeta{
-					ID:       stores.ID(uuid.New().String()),
+					ID:       storiface.ID(uuid.New().String()),
 					Weight:   10,
 					CanSeal:  true,
 					CanStore: true,
@@ -482,7 +478,7 @@ func storageMinerInit(ctx context.Context, cctx *cli.Context, api v1api.FullNode
 			}
 			stor := stores.NewRemote(lstor, si, http.Header(sa), 10, &stores.DefaultPartialFileHandler{})
 
-			smgr, err := sectorstorage.New(ctx, lstor, stor, lr, si, sectorstorage.SealerConfig{
+			smgr, err := sectorstorage.New(ctx, lstor, stor, lr, si, sectorstorage.Config{
 				ParallelFetchLimit:       10,
 				AllowAddPiece:            true,
 				AllowPreCommit1:          true,
@@ -614,7 +610,7 @@ func configureStorageMiner(ctx context.Context, api v1api.FullNode, addr address
 	msg := &types.Message{
 		To:         addr,
 		From:       mi.Worker,
-		Method:     miner.Methods.ChangePeerID,
+		Method:     builtin.MethodsMiner.ChangePeerID,
 		Params:     enc,
 		Value:      types.NewInt(0),
 		GasPremium: gasPrice,

@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/filecoin-project/go-address"
+
+	"github.com/libp2p/go-libp2p-core/network"
+
 	datatransfer "github.com/filecoin-project/go-data-transfer"
 	"github.com/filecoin-project/go-fil-markets/retrievalmarket"
 	"github.com/filecoin-project/go-state-types/abi"
@@ -12,7 +16,6 @@ import (
 	"github.com/ipfs/go-cid"
 	"github.com/ipfs/go-graphsync"
 
-	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ma "github.com/multiformats/go-multiaddr"
@@ -124,12 +127,6 @@ func NewDataTransferChannel(hostID peer.ID, channelState datatransfer.ChannelSta
 	return channel
 }
 
-type NetBlockList struct {
-	Peers     []peer.ID
-	IPAddrs   []string
-	IPSubnets []string
-}
-
 type NetStat struct {
 	System    *network.ScopeStat           `json:",omitempty"`
 	Transient *network.ScopeStat           `json:",omitempty"`
@@ -150,6 +147,12 @@ type NetLimit struct {
 	Streams, StreamsInbound, StreamsOutbound int
 	Conns, ConnsInbound, ConnsOutbound       int
 	FD                                       int
+}
+
+type NetBlockList struct {
+	Peers     []peer.ID
+	IPAddrs   []string
+	IPSubnets []string
 }
 
 type ExtendedPeerInfo struct {
@@ -284,4 +287,18 @@ type ExportRef struct {
 
 	FromLocalCAR string // if specified, get data from a local CARv2 file.
 	DealID       retrievalmarket.DealID
+}
+
+type MinerInfo struct {
+	Owner                      address.Address   // Must be an ID-address.
+	Worker                     address.Address   // Must be an ID-address.
+	NewWorker                  address.Address   // Must be an ID-address.
+	ControlAddresses           []address.Address // Must be an ID-addresses.
+	WorkerChangeEpoch          abi.ChainEpoch
+	PeerId                     *peer.ID
+	Multiaddrs                 []abi.Multiaddrs
+	WindowPoStProofType        abi.RegisteredPoStProof
+	SectorSize                 abi.SectorSize
+	WindowPoStPartitionSectors uint64
+	ConsensusFaultElapsed      abi.ChainEpoch
 }

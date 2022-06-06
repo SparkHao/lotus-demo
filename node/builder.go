@@ -222,7 +222,7 @@ var LibP2P = Options(
 	Override(ConnGaterKey, lp2p.ConnGaterOption),
 
 	// Services (resource management)
-	Override(new(network.ResourceManager), lp2p.ResourceManager),
+	Override(new(network.ResourceManager), lp2p.ResourceManager(200)),
 	Override(ResourceManagerKey, lp2p.ResourceManagerOption),
 )
 
@@ -231,8 +231,12 @@ func IsType(t repo.RepoType) func(s *Settings) bool {
 }
 
 func isFullOrLiteNode(s *Settings) bool { return s.nodeType == repo.FullNode }
-func isFullNode(s *Settings) bool       { return s.nodeType == repo.FullNode && !s.Lite }
-func isLiteNode(s *Settings) bool       { return s.nodeType == repo.FullNode && s.Lite }
+func isFullNode(s *Settings) bool {
+	return s.nodeType == repo.FullNode && !s.Lite
+}
+func isLiteNode(s *Settings) bool {
+	return s.nodeType == repo.FullNode && s.Lite
+}
 
 func Base() Option {
 	return Options(
@@ -282,6 +286,7 @@ func ConfigCommon(cfg *config.Common, enableLibp2pNode bool) Option {
 				cfg.Libp2p.ConnMgrHigh,
 				time.Duration(cfg.Libp2p.ConnMgrGrace),
 				cfg.Libp2p.ProtectedPeers)),
+			Override(new(network.ResourceManager), lp2p.ResourceManager(cfg.Libp2p.ConnMgrHigh)),
 			Override(new(*pubsub.PubSub), lp2p.GossipSub),
 			Override(new(*config.Pubsub), &cfg.Pubsub),
 
@@ -379,6 +384,9 @@ func Test() Option {
 		Unset(new(*peermgr.PeerMgr)),
 		Override(new(beacon.Schedule), testing.RandomBeacon),
 		Override(new(*storageadapter.DealPublisher), storageadapter.NewDealPublisher(nil, storageadapter.PublishMsgConfig{})),
+		// use the testing bundles
+		Unset(new(dtypes.BuiltinActorsLoaded)),
+		Override(new(dtypes.BuiltinActorsLoaded), modules.LoadBuiltinActorsTesting),
 	)
 }
 

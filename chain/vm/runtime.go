@@ -23,7 +23,6 @@ import (
 	rt5 "github.com/filecoin-project/specs-actors/v5/actors/runtime"
 	rt6 "github.com/filecoin-project/specs-actors/v6/actors/runtime"
 	rt7 "github.com/filecoin-project/specs-actors/v7/actors/runtime"
-	rt8 "github.com/filecoin-project/specs-actors/v8/actors/runtime"
 	"github.com/ipfs/go-cid"
 	ipldcbor "github.com/ipfs/go-ipld-cbor"
 	mh "github.com/multiformats/go-multihash"
@@ -60,8 +59,8 @@ func (m *Message) ValueReceived() abi.TokenAmount {
 	return m.msg.Value
 }
 
-// EnableGasTracing, if true, outputs gas tracing in execution traces.
-var EnableGasTracing = os.Getenv("LOTUS_VM_ENABLE_GAS_TRACING_VERY_SLOW") == "1"
+// EnableDetailedTracing, if true, outputs gas tracing in execution traces.
+var EnableDetailedTracing = os.Getenv("LOTUS_VM_ENABLE_GAS_TRACING_VERY_SLOW") == "1"
 
 type Runtime struct {
 	rt7.Message
@@ -69,7 +68,7 @@ type Runtime struct {
 
 	ctx context.Context
 
-	vm        *VM
+	vm        *LegacyVM
 	state     *state.StateTree
 	height    abi.ChainEpoch
 	cst       ipldcbor.IpldStore
@@ -157,13 +156,12 @@ var _ rt4.Runtime = (*Runtime)(nil)
 var _ rt5.Runtime = (*Runtime)(nil)
 var _ rt6.Runtime = (*Runtime)(nil)
 var _ rt7.Runtime = (*Runtime)(nil)
-var _ rt8.Runtime = (*Runtime)(nil)
 
 func (rt *Runtime) shimCall(f func() interface{}) (rval []byte, aerr aerrors.ActorError) {
 	defer func() {
 		if r := recover(); r != nil {
 			if ar, ok := r.(aerrors.ActorError); ok {
-				log.Warnf("VM.Call failure in call from: %s to %s: %+v", rt.Caller(), rt.Receiver(), ar)
+				log.Warnf("LegacyVM.Call failure in call from: %s to %s: %+v", rt.Caller(), rt.Receiver(), ar)
 				aerr = ar
 				return
 			}
@@ -552,7 +550,7 @@ func (rt *Runtime) stateCommit(oldh, newh cid.Cid) aerrors.ActorError {
 }
 
 func (rt *Runtime) finilizeGasTracing() {
-	if EnableGasTracing {
+	if EnableDetailedTracing {
 		if rt.lastGasCharge != nil {
 			rt.lastGasCharge.TimeTaken = time.Since(rt.lastGasChargeTime)
 		}
@@ -586,7 +584,7 @@ func (rt *Runtime) chargeGasFunc(skip int) func(GasCharge) {
 
 func (rt *Runtime) chargeGasInternal(gas GasCharge, skip int) aerrors.ActorError {
 	toUse := gas.Total()
-	if EnableGasTracing {
+	if EnableDetailedTracing {
 		var callers [10]uintptr
 
 		cout := gruntime.Callers(2+skip, callers[:])

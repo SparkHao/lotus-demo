@@ -1,19 +1,27 @@
 package build
 
 import (
-	_ "embed"
+	"bytes"
+
+	"github.com/filecoin-project/lotus/chain/actors"
+
+	"github.com/BurntSushi/toml"
 )
 
-//go:embed builtin-actors/builtin-actors-v8.car
-var actorsv8 []byte
+var BuiltinActorReleases map[actors.Version]Bundle
 
-//go:embed builtin-actors/builtin-actors-v7.car
-var actorsv7 []byte
+func init() {
+	BuiltinActorReleases = make(map[actors.Version]Bundle)
 
-func BuiltinActorsV8Bundle() []byte {
-	return actorsv8
-}
+	spec := BundleSpec{}
 
-func BuiltinActorsV7Bundle() []byte {
-	return actorsv7
+	r := bytes.NewReader(BuiltinActorBundles)
+	_, err := toml.DecodeReader(r, &spec)
+	if err != nil {
+		panic(err)
+	}
+
+	for _, b := range spec.Bundles {
+		BuiltinActorReleases[b.Version] = b
+	}
 }

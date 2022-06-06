@@ -110,6 +110,7 @@ func DefaultStorageMiner() *StorageMiner {
 			WaitDealsDelay:            Duration(time.Hour * 6),
 			AlwaysKeepUnsealedCopy:    true,
 			FinalizeEarly:             false,
+			MakeNewSectorForDeals:     true,
 
 			CollateralFromMinerBalance: false,
 			AvailableBalanceBuffer:     types.FIL(big.Zero()),
@@ -137,7 +138,11 @@ func DefaultStorageMiner() *StorageMiner {
 			TerminateBatchWait: Duration(5 * time.Minute),
 		},
 
-		Storage: sectorstorage.SealerConfig{
+		Proving: ProvingConfig{
+			ParallelCheckLimit: 128,
+		},
+
+		Storage: SealerConfig{
 			AllowAddPiece:            true,
 			AllowPreCommit1:          true,
 			AllowPreCommit2:          true,
@@ -163,7 +168,6 @@ func DefaultStorageMiner() *StorageMiner {
 			ConsiderVerifiedStorageDeals:   true,
 			ConsiderUnverifiedStorageDeals: true,
 			PieceCidBlocklist:              []cid.Cid{},
-			MakeNewSectorForDeals:          true,
 			// TODO: It'd be nice to set this based on sector size
 			MaxDealStartDelay:               Duration(time.Hour * 24 * 14),
 			ExpectedSealDuration:            Duration(time.Hour * 24),
@@ -192,8 +196,10 @@ func DefaultStorageMiner() *StorageMiner {
 			Enable:               false,
 			EntriesCacheCapacity: 1024,
 			EntriesChunkSize:     16384,
-			TopicName:            "/indexer/ingest/mainnet",
-			PurgeCacheOnStart:    false,
+			// The default empty TopicName means it is inferred from network name, in the following
+			// format: "/indexer/ingest/<network-name>"
+			TopicName:         "",
+			PurgeCacheOnStart: false,
 		},
 
 		Subsystems: MinerSubsystemConfig{

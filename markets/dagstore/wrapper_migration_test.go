@@ -1,9 +1,12 @@
+//stm: #integration
 package dagstore
 
 import (
 	"context"
 	"io"
 	"testing"
+
+	markettypes "github.com/filecoin-project/go-state-types/builtin/v8/market"
 
 	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
 
@@ -19,8 +22,6 @@ import (
 	"github.com/filecoin-project/go-fil-markets/storagemarket"
 
 	"github.com/filecoin-project/lotus/node/config"
-
-	"github.com/filecoin-project/specs-actors/v8/actors/builtin/market"
 )
 
 func TestShardRegistration(t *testing.T) {
@@ -59,10 +60,11 @@ func TestShardRegistration(t *testing.T) {
 
 	deals := []storagemarket.MinerDeal{{
 		// Should be registered
+		//stm: @MARKET_DAGSTORE_MIGRATE_DEALS_001
 		State:        storagemarket.StorageDealSealing,
 		SectorNumber: unsealedSector1,
-		ClientDealProposal: market.ClientDealProposal{
-			Proposal: market.DealProposal{
+		ClientDealProposal: markettypes.ClientDealProposal{
+			Proposal: markettypes.DealProposal{
 				PieceCID: pieceCidUnsealed,
 			},
 		},
@@ -70,17 +72,18 @@ func TestShardRegistration(t *testing.T) {
 		// Should be registered with lazy registration (because sector is sealed)
 		State:        storagemarket.StorageDealSealing,
 		SectorNumber: sealedSector,
-		ClientDealProposal: market.ClientDealProposal{
-			Proposal: market.DealProposal{
+		ClientDealProposal: markettypes.ClientDealProposal{
+			Proposal: markettypes.DealProposal{
 				PieceCID: pieceCidSealed,
 			},
 		},
 	}, {
 		// Should be ignored because deal is no longer active
+		//stm: @MARKET_DAGSTORE_MIGRATE_DEALS_003
 		State:        storagemarket.StorageDealError,
 		SectorNumber: unsealedSector2,
-		ClientDealProposal: market.ClientDealProposal{
-			Proposal: market.DealProposal{
+		ClientDealProposal: markettypes.ClientDealProposal{
+			Proposal: markettypes.DealProposal{
 				PieceCID: pieceCidUnsealed2,
 			},
 		},
@@ -88,8 +91,8 @@ func TestShardRegistration(t *testing.T) {
 		// Should be ignored because deal is not yet sealing
 		State:        storagemarket.StorageDealFundsReserved,
 		SectorNumber: unsealedSector3,
-		ClientDealProposal: market.ClientDealProposal{
-			Proposal: market.DealProposal{
+		ClientDealProposal: markettypes.ClientDealProposal{
+			Proposal: markettypes.DealProposal{
 				PieceCID: pieceCidUnsealed3,
 			},
 		},
@@ -114,6 +117,7 @@ func TestShardRegistration(t *testing.T) {
 	require.True(t, migrated)
 	require.NoError(t, err)
 
+	//stm: @MARKET_DAGSTORE_GET_ALL_SHARDS_001
 	info := dagst.AllShardsInfo()
 	require.Len(t, info, 2)
 	for _, i := range info {
@@ -121,6 +125,7 @@ func TestShardRegistration(t *testing.T) {
 	}
 
 	// Run register shard migration again
+	//stm: @MARKET_DAGSTORE_MIGRATE_DEALS_002
 	migrated, err = w.MigrateDeals(ctx, deals)
 	require.False(t, migrated)
 	require.NoError(t, err)

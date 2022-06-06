@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/filecoin-project/go-state-types/manifest"
+
 	"golang.org/x/xerrors"
 
 	cid "github.com/ipfs/go-cid"
@@ -14,7 +16,6 @@ import (
 
 	"github.com/filecoin-project/lotus/blockstore"
 	"github.com/filecoin-project/lotus/chain/actors/adt"
-	"github.com/filecoin-project/specs-actors/v8/actors/builtin/manifest"
 )
 
 var manifestCids map[Version]cid.Cid = map[Version]cid.Cid{
@@ -24,11 +25,22 @@ var manifestCids map[Version]cid.Cid = map[Version]cid.Cid{
 var manifests map[Version]*manifest.Manifest
 var actorMeta map[cid.Cid]actorEntry
 
-var (
-	manifestMx sync.Mutex
+const (
+	AccountKey  = "account"
+	CronKey     = "cron"
+	InitKey     = "init"
+	MarketKey   = "storagemarket"
+	MinerKey    = "storageminer"
+	MultisigKey = "multisig"
+	PaychKey    = "paymentchannel"
+	PowerKey    = "storagepower"
+	RewardKey   = "reward"
+	SystemKey   = "system"
+	VerifregKey = "verifiedregistry"
+)
 
-	loadOnce  sync.Once
-	loadError error
+var (
+	manifestMx sync.RWMutex
 )
 
 type actorEntry struct {
@@ -44,23 +56,21 @@ func AddManifest(av Version, manifestCid cid.Cid) {
 }
 
 func GetManifest(av Version) (cid.Cid, bool) {
-	manifestMx.Lock()
-	defer manifestMx.Unlock()
+	manifestMx.RLock()
+	defer manifestMx.RUnlock()
 
 	c, ok := manifestCids[av]
 	return c, ok
 }
 
 func LoadManifests(ctx context.Context, store cbor.IpldStore) error {
-	// tests may invoke this concurrently, so we wrap it in a sync.Once
-	loadOnce.Do(func() { loadError = loadManifests(ctx, store) })
-	return loadError
-}
-
-func loadManifests(ctx context.Context, store cbor.IpldStore) error {
 	manifestMx.Lock()
 	defer manifestMx.Unlock()
 
+	return loadManifests(ctx, store)
+}
+
+func loadManifests(ctx context.Context, store cbor.IpldStore) error {
 	adtStore := adt.WrapStore(ctx, store)
 
 	manifests = make(map[Version]*manifest.Manifest)
@@ -78,7 +88,19 @@ func loadManifests(ctx context.Context, store cbor.IpldStore) error {
 
 		manifests[av] = mf
 
-		for _, name := range []string{"system", "init", "cron", "account", "storagepower", "storageminer", "storagemarket", "paymentchannel", "multisig", "reward", "verifiedregistry"} {
+		for _, name := range []string{
+			AccountKey,
+			CronKey,
+			InitKey,
+			MarketKey,
+			MinerKey,
+			MultisigKey,
+			PaychKey,
+			PowerKey,
+			RewardKey,
+			SystemKey,
+			VerifregKey,
+		} {
 			c, ok := mf.Get(name)
 			if ok {
 				actorMeta[c] = actorEntry{name: name, version: av}
@@ -90,6 +112,9 @@ func loadManifests(ctx context.Context, store cbor.IpldStore) error {
 }
 
 func GetActorCodeID(av Version, name string) (cid.Cid, bool) {
+	manifestMx.RLock()
+	defer manifestMx.RUnlock()
+
 	mf, ok := manifests[av]
 	if ok {
 		return mf.Get(name)
@@ -99,6 +124,9 @@ func GetActorCodeID(av Version, name string) (cid.Cid, bool) {
 }
 
 func GetActorMetaByCode(c cid.Cid) (string, Version, bool) {
+	manifestMx.RLock()
+	defer manifestMx.RUnlock()
+
 	entry, ok := actorMeta[c]
 	if !ok {
 		return "", -1, false
@@ -123,6 +151,8 @@ func LoadBundle(ctx context.Context, bs blockstore.Blockstore, av Version, data 
 	if err != nil {
 		return xerrors.Errorf("error loading builtin actors v%d bundle: %w", av, err)
 	}
+
+	// TODO: check that this only has one root?
 
 	manifestCid := hdr.Roots[0]
 	AddManifest(av, manifestCid)

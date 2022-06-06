@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"time"
 
+	minertypes "github.com/filecoin-project/go-state-types/builtin/v8/miner"
+
 	"github.com/filecoin-project/dagstore"
 	"github.com/filecoin-project/dagstore/shard"
 	"github.com/filecoin-project/go-jsonrpc/auth"
@@ -92,6 +94,8 @@ type StorageMinerAPI struct {
 	storiface.WorkerReturn `optional:"true"`
 	AddrSel                *storage.AddressSelector
 
+	WdPoSt *storage.WindowPoStScheduler `optional:"true"`
+
 	Epp gen.WinningPoStProver `optional:"true"`
 	DS  dtypes.MetadataDS
 
@@ -131,8 +135,8 @@ func (sm *StorageMinerAPI) ServeRemote(perm bool) func(w http.ResponseWriter, r 
 	}
 }
 
-func (sm *StorageMinerAPI) WorkerStats(context.Context) (map[uuid.UUID]storiface.WorkerStats, error) {
-	return sm.StorageMgr.WorkerStats(), nil
+func (sm *StorageMinerAPI) WorkerStats(ctx context.Context) (map[uuid.UUID]storiface.WorkerStats, error) {
+	return sm.StorageMgr.WorkerStats(ctx), nil
 }
 
 func (sm *StorageMinerAPI) WorkerJobs(ctx context.Context) (map[uuid.UUID][]storiface.WorkerJob, error) {
@@ -294,13 +298,13 @@ func (sm *StorageMinerAPI) SectorsSummary(ctx context.Context) (map[api.SectorSt
 	return out, nil
 }
 
-func (sm *StorageMinerAPI) StorageLocal(ctx context.Context) (map[stores.ID]string, error) {
+func (sm *StorageMinerAPI) StorageLocal(ctx context.Context) (map[storiface.ID]string, error) {
 	l, err := sm.LocalStore.Local(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	out := map[stores.ID]string{}
+	out := map[storiface.ID]string{}
 	for _, st := range l {
 		out[st.ID] = st.LocalPath
 	}
@@ -324,7 +328,7 @@ func (sm *StorageMinerAPI) SectorsRefs(ctx context.Context) (map[string][]api.Se
 	return out, nil
 }
 
-func (sm *StorageMinerAPI) StorageStat(ctx context.Context, id stores.ID) (fsutil.FsStat, error) {
+func (sm *StorageMinerAPI) StorageStat(ctx context.Context, id storiface.ID) (fsutil.FsStat, error) {
 	return sm.RemoteStore.FsStat(ctx, id)
 }
 
@@ -407,6 +411,21 @@ func (sm *StorageMinerAPI) SectorMatchPendingPiecesToOpenSectors(ctx context.Con
 	return sm.Miner.SectorMatchPendingPiecesToOpenSectors(ctx)
 }
 
+func (sm *StorageMinerAPI) ComputeWindowPoSt(ctx context.Context, dlIdx uint64, tsk types.TipSetKey) ([]minertypes.SubmitWindowedPoStParams, error) {
+	var ts *types.TipSet
+	var err error
+	if tsk == types.EmptyTSK {
+		ts, err = sm.Full.ChainHead(ctx)
+	} else {
+		ts, err = sm.Full.ChainGetTipSet(ctx, tsk)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return sm.WdPoSt.ComputePoSt(ctx, dlIdx, ts)
+}
+
 func (sm *StorageMinerAPI) WorkerConnect(ctx context.Context, url string) error {
 	w, err := connectRemoteWorker(ctx, sm, url)
 	if err != nil {
@@ -436,7 +455,7 @@ func (sm *StorageMinerAPI) MarketImportDealData(ctx context.Context, propCid cid
 	return sm.StorageProvider.ImportDataForDeal(ctx, propCid, fi)
 }
 
-func (sm *StorageMinerAPI) listDeals(ctx context.Context) ([]api.MarketDeal, error) {
+func (sm *StorageMinerAPI) listDeals(ctx context.Context) ([]*api.MarketDeal, error) {
 	ts, err := sm.Full.ChainHead(ctx)
 	if err != nil {
 		return nil, err
@@ -447,7 +466,7 @@ func (sm *StorageMinerAPI) listDeals(ctx context.Context) ([]api.MarketDeal, err
 		return nil, err
 	}
 
-	var out []api.MarketDeal
+	var out []*api.MarketDeal
 
 	for _, deal := range allDeals {
 		if deal.Proposal.Provider == sm.Miner.Address() {
@@ -458,7 +477,7 @@ func (sm *StorageMinerAPI) listDeals(ctx context.Context) ([]api.MarketDeal, err
 	return out, nil
 }
 
-func (sm *StorageMinerAPI) MarketListDeals(ctx context.Context) ([]api.MarketDeal, error) {
+func (sm *StorageMinerAPI) MarketListDeals(ctx context.Context) ([]*api.MarketDeal, error) {
 	return sm.listDeals(ctx)
 }
 
@@ -1054,7 +1073,7 @@ func (sm *StorageMinerAPI) DagstoreLookupPieces(ctx context.Context, cid cid.Cid
 	return ret, nil
 }
 
-func (sm *StorageMinerAPI) DealsList(ctx context.Context) ([]api.MarketDeal, error) {
+func (sm *StorageMinerAPI) DealsList(ctx context.Context) ([]*api.MarketDeal, error) {
 	return sm.listDeals(ctx)
 }
 
@@ -1173,23 +1192,23 @@ func (sm *StorageMinerAPI) CreateBackup(ctx context.Context, fpath string) error
 	return backup(ctx, sm.DS, fpath)
 }
 
-func (sm *StorageMinerAPI) CheckProvable(ctx context.Context, pp abi.RegisteredPoStProof, sectors []sto.SectorRef, update []bool, expensive bool) (map[abi.SectorNumber]string, error) {
+func (sm *StorageMinerAPI) CheckProvable(ctx context.Context, pp abi.RegisteredPoStProof, sectors []sto.SectorRef, expensive bool) (map[abi.SectorNumber]string, error) {
 	var rg storiface.RGetter
 	if expensive {
-		rg = func(ctx context.Context, id abi.SectorID) (cid.Cid, error) {
+		rg = func(ctx context.Context, id abi.SectorID) (cid.Cid, bool, error) {
 			si, err := sm.Miner.SectorsStatus(ctx, id.Number, false)
 			if err != nil {
-				return cid.Undef, err
+				return cid.Undef, false, err
 			}
 			if si.CommR == nil {
-				return cid.Undef, xerrors.Errorf("commr is nil")
+				return cid.Undef, false, xerrors.Errorf("commr is nil")
 			}
 
-			return *si.CommR, nil
+			return *si.CommR, si.ReplicaUpdateMessage != nil, nil
 		}
 	}
 
-	bad, err := sm.StorageMgr.CheckProvable(ctx, pp, sectors, update, rg)
+	bad, err := sm.StorageMgr.CheckProvable(ctx, pp, sectors, rg)
 	if err != nil {
 		return nil, err
 	}

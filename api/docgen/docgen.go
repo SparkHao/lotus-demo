@@ -40,7 +40,6 @@ import (
 	"github.com/filecoin-project/lotus/build"
 	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/filecoin-project/lotus/extern/sector-storage/sealtasks"
-	"github.com/filecoin-project/lotus/extern/sector-storage/stores"
 	"github.com/filecoin-project/lotus/extern/sector-storage/storiface"
 	sealing "github.com/filecoin-project/lotus/extern/storage-sealing"
 	"github.com/filecoin-project/lotus/node/modules/dtypes"
@@ -147,6 +146,10 @@ func init() {
 	addExample(map[string]api.MarketDeal{
 		"t026363": ExampleValue("init", reflect.TypeOf(api.MarketDeal{}), nil).(api.MarketDeal),
 	})
+	addExample(map[string]*api.MarketDeal{
+		"t026363": ExampleValue("init", reflect.TypeOf(&api.MarketDeal{}), nil).(*api.MarketDeal),
+	})
+
 	addExample(map[string]api.MarketBalance{
 		"t026363": ExampleValue("init", reflect.TypeOf(api.MarketBalance{}), nil).(api.MarketBalance),
 	})
@@ -199,10 +202,10 @@ func init() {
 		},
 	})
 	addExample(api.SectorState(sealing.Proving))
-	addExample(stores.ID("76f1988b-ef30-4d7e-b3ec-9a627f4ba5a8"))
+	addExample(storiface.ID("76f1988b-ef30-4d7e-b3ec-9a627f4ba5a8"))
 	addExample(storiface.FTUnsealed)
 	addExample(storiface.PathSealing)
-	addExample(map[stores.ID][]stores.Decl{
+	addExample(map[storiface.ID][]storiface.Decl{
 		"76f1988b-ef30-4d7e-b3ec-9a627f4ba5a8": {
 			{
 				SectorID:       abi.SectorID{Miner: 1000, Number: 100},
@@ -210,7 +213,7 @@ func init() {
 			},
 		},
 	})
-	addExample(map[stores.ID]string{
+	addExample(map[storiface.ID]string{
 		"76f1988b-ef30-4d7e-b3ec-9a627f4ba5a8": "/data/path",
 	})
 	addExample(map[uuid.UUID][]storiface.WorkerJob{

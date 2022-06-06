@@ -9,11 +9,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/filecoin-project/go-state-types/builtin"
+	minertypes "github.com/filecoin-project/go-state-types/builtin/v8/miner"
+
 	"github.com/filecoin-project/go-bitfield"
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/go-state-types/dline"
 	"github.com/filecoin-project/lotus/api"
-	aminer "github.com/filecoin-project/lotus/chain/actors/builtin/miner"
 	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/filecoin-project/lotus/miner"
 	"github.com/stretchr/testify/require"
@@ -72,10 +74,10 @@ func (p *partitionTracker) recordIfPost(t *testing.T, bm *BlockMiner, msg *types
 	if !(msg.To == bm.miner.ActorAddr) {
 		return
 	}
-	if msg.Method != aminer.Methods.SubmitWindowedPoSt {
+	if msg.Method != builtin.MethodsMiner.SubmitWindowedPoSt {
 		return
 	}
-	params := aminer.SubmitWindowedPoStParams{}
+	params := minertypes.SubmitWindowedPoStParams{}
 	require.NoError(t, params.UnmarshalCBOR(bytes.NewReader(msg.Params)))
 	for _, part := range params.Partitions {
 		p.posted.Set(part.Index)
@@ -192,7 +194,11 @@ func (bm *BlockMiner) MineBlocksMustPost(ctx context.Context, blocktime time.Dur
 					InjectNulls: abi.ChainEpoch(nulls + i),
 					Done:        reportSuccessFn,
 				})
-				success = <-wait
+				select {
+				case success = <-wait:
+				case <-ctx.Done():
+					return
+				}
 				if !success {
 					// if we are mining a new null block and it brings us past deadline boundary we need to wait for miner to post
 					if ts.Height()+1+abi.ChainEpoch(nulls+i) >= dlinfo.Last() {

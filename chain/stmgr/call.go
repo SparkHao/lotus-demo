@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/filecoin-project/lotus/blockstore"
+
 	cbor "github.com/ipfs/go-ipld-cbor"
 
 	"github.com/filecoin-project/lotus/chain/state"
-
-	"github.com/filecoin-project/lotus/blockstore"
 
 	"github.com/filecoin-project/lotus/chain/rand"
 
@@ -70,6 +70,7 @@ func (sm *StateManager) Call(ctx context.Context, msg *types.Message, ts *types.
 		pheight = ts.Height() - 1
 	}
 
+	// Since we're simulating a future message, pretend we're applying it in the "next" tipset
 	vmHeight := pheight + 1
 	bstate := ts.ParentState()
 
@@ -127,7 +128,7 @@ func (sm *StateManager) Call(ctx context.Context, msg *types.Message, ts *types.
 
 	stTree, err := sm.StateTree(bstate)
 	if err != nil {
-		return nil, err
+		return nil, xerrors.Errorf("failed to load state tree: %w", err)
 	}
 
 	fromActor, err := stTree.GetActor(msg.From)
@@ -193,6 +194,7 @@ func (sm *StateManager) CallWithGas(ctx context.Context, msg *types.Message, pri
 		}
 	}
 
+	// Since we're simulating a future message, pretend we're applying it in the "next" tipset
 	vmHeight := ts.Height() + 1
 
 	stateCid, _, err := sm.TipSetState(ctx, ts)
@@ -221,7 +223,7 @@ func (sm *StateManager) CallWithGas(ctx context.Context, msg *types.Message, pri
 		return nil, err
 	}
 
-	buffStore := blockstore.NewBuffered(sm.cs.StateBlockstore())
+	buffStore := blockstore.NewTieredBstore(sm.cs.StateBlockstore(), blockstore.NewMemorySync())
 	vmopt := &vm.VMOpts{
 		StateBase:      stateCid,
 		Epoch:          vmHeight,
@@ -246,6 +248,8 @@ func (sm *StateManager) CallWithGas(ctx context.Context, msg *types.Message, pri
 		}
 	}
 
+	// We flush to get the VM's view of the state tree after applying the above messages
+	// This is needed to get the correct nonce from the actor state to match the VM
 	stateCid, err = vmi.Flush(ctx)
 	if err != nil {
 		return nil, xerrors.Errorf("flushing vm: %w", err)

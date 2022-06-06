@@ -53,7 +53,7 @@ var ChainNode = Options(
 	//      right manifest cid.
 	//      This restriction will be lifted once we have the final actors v8 bundle and we know
 	//      the manifest cid.
-	Override(new(dtypes.BuiltinActorsLoaded), modules.LoadBultinActors),
+	Override(new(dtypes.BuiltinActorsLoaded), modules.LoadBuiltinActors),
 
 	// Consensus settings
 	Override(new(dtypes.DrandSchedule), modules.BuiltinDrandConfig),
@@ -72,7 +72,7 @@ var ChainNode = Options(
 	Override(new(ffiwrapper.Verifier), ffiwrapper.ProofVerifier),
 	Override(new(ffiwrapper.Prover), ffiwrapper.ProofProver),
 
-	// Consensus: VM
+	// Consensus: LegacyVM
 	Override(new(vm.SyscallBuilder), vm.Syscalls),
 
 	// Consensus: Chain storage/access
