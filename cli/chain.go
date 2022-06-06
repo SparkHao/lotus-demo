@@ -1773,6 +1773,10 @@ var ChainInvokeCmd = &cli.Command{
 				afmt.Println(string(wait.Receipt.Return), " ; gas_used: ", wait.Receipt.GasUsed)
 			}
 
+			if msg.Method == 22 || msg.Method == 81 || msg.Method == 82 {
+				afmt.Println(wait.Receipt.GasUsed)
+			}
+
 		} else {
 			afmt.Println("OK")
 		}
