@@ -1762,14 +1762,15 @@ var ChainInvokeCmd = &cli.Command{
 				afmt.Println("address: ", address, " ; gas_used: ", wait.Receipt.GasUsed)
 			}
 
-			if msg.Method == 11 || msg.Method == 12 || msg.Method == 53 || msg.Method == 101 {
+			if msg.Method == 11 || msg.Method == 12 || msg.Method == 53 {
 				_, cid, _ := cid.CidFromBytes(wait.Receipt.Return)
 				afmt.Println("cid: ", cid, "; gas_used : ", wait.Receipt.GasUsed)
 			}
 
 			if msg.Method == 52 || msg.Method == 51 || msg.Method == 16 || msg.Method == 15 || msg.Method == 102 || msg.Method == 103 || msg.Method == 104 ||
 				msg.Method == 71 || msg.Method == 72 || msg.Method == 73 || msg.Method == 74 || msg.Method == 61 || msg.Method == 62 || msg.Method == 63 ||
-				msg.Method == 64 || msg.Method == 32 || msg.Method == 91 || msg.Method == 55 || msg.Method == 7 || msg.Method == 8 || msg.Method == 17{
+				msg.Method == 64 || msg.Method == 32 || msg.Method == 91 || msg.Method == 55 || msg.Method == 7 || msg.Method == 8 || msg.Method == 17 ||
+				msg.Method == 101 || msg.Method == 102 {
 				afmt.Println(string(wait.Receipt.Return), " ; gas_used: ", wait.Receipt.GasUsed)
 			}
 
